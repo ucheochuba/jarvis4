@@ -1,13 +1,70 @@
-import React, { useRef, useState } from 'react';
-import { Box, Button, Typography, CircularProgress, Alert, TextField } from '@mui/material';
-import { analyzeScene } from '../services/geminiService';
+import React, { useRef, useState, useCallback } from 'react';
+import { Box, Button, Typography, CircularProgress, Alert } from '@mui/material';
+import { Mic, MicOff } from '@mui/icons-material';
+import { analyzeScene, continueConversation } from '../services/geminiService';
 import { speakWithElevenLabs } from '../services/elevenLabsService';
+import { useSpeechRecognition } from '../hooks';
+
+const DANGEROUS_SCENE_PROMPT = "What's dangerous in the scene?";
 
 const DockWorkerView: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<string[]>([]);
+  const [initialAnalysisDone, setInitialAnalysisDone] = useState(false);
+
+  const handleContinueConversation = useCallback(async (prompt: string) => {
+    const elevenLabsApiKey = process.env.REACT_APP_ELEVEN_LABS_API_KEY;
+    if (!elevenLabsApiKey) {
+      setError('ElevenLabs API key is not configured. Speech responses will not work, but recording is still available.');
+      // Continue without speech synthesis
+    }
+
+    setIsProcessing(true);
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const result = await continueConversation(conversationHistory, prompt);
+      setIsAnalyzing(false);
+      setAnalysis(result);
+      setConversationHistory(prev => [...prev, prompt, result]);
+      
+      // Only try to speak if API key is available
+      if (elevenLabsApiKey) {
+        try {
+          await speakWithElevenLabs(result, elevenLabsApiKey);
+        } catch (speechError) {
+          console.warn('Speech synthesis failed:', speechError);
+          // Don't show error to user, just log it
+        }
+      }
+    } catch (err) {
+      console.error('Conversation error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(`Error: ${errorMessage}`);
+      setIsAnalyzing(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [conversationHistory]);
+
+  const handleSpeechResult = useCallback((text: string) => {
+    // If no initial analysis is done yet, perform it first
+    if (!initialAnalysisDone) {
+      setError('Please analyze the scene first before asking questions.');
+      return;
+    }
+    handleContinueConversation(text);
+  }, [initialAnalysisDone, handleContinueConversation]);
+
+  const { isRecording, isSupported, permissionGranted, startListening, stopListening } = useSpeechRecognition({
+    onResult: handleSpeechResult,
+    onError: setError,
+  });
 
   const handleAnalyzeScene = async () => {
     if (!videoRef.current) {
@@ -16,11 +73,12 @@ const DockWorkerView: React.FC = () => {
 
     const elevenLabsApiKey = process.env.REACT_APP_ELEVEN_LABS_API_KEY;
     if (!elevenLabsApiKey) {
-      setError('ElevenLabs API key is not configured in .env file.');
-      return;
+      setError('ElevenLabs API key is not configured. Analysis will work, but speech responses will not.');
+      // Continue without speech synthesis
     }
 
-    setIsLoading(true);
+    setIsProcessing(true);
+    setIsAnalyzing(true);
     setAnalysis(null);
     setError(null);
 
@@ -38,16 +96,29 @@ const DockWorkerView: React.FC = () => {
 
       const imageData = tempCanvas.toDataURL('image/jpeg').replace('data:image/jpeg;base64,', '');
       
-      const result = await analyzeScene(imageData);
+      const result = await analyzeScene(imageData, DANGEROUS_SCENE_PROMPT);
+      setIsAnalyzing(false);
       setAnalysis(result);
-      await speakWithElevenLabs(result, elevenLabsApiKey);
+      setInitialAnalysisDone(true);
+      setConversationHistory([`${DANGEROUS_SCENE_PROMPT}\n${result}`]);
+      
+      // Only try to speak if API key is available
+      if (elevenLabsApiKey) {
+        try {
+          await speakWithElevenLabs(result, elevenLabsApiKey);
+        } catch (speechError) {
+          console.warn('Speech synthesis failed:', speechError);
+          // Don't show error to user, just log it
+        }
+      }
 
     } catch (err) {
       console.error('Analysis or speech error:', err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       setError(`Error: ${errorMessage}`);
+      setIsAnalyzing(false);
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -68,6 +139,28 @@ const DockWorkerView: React.FC = () => {
               transform: translateX(100%);
             }
           }
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+          @keyframes pulse {
+            0% {
+              transform: scale(1);
+              box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.7);
+            }
+            70% {
+              transform: scale(1.05);
+              box-shadow: 0 0 10px 20px rgba(255, 82, 82, 0);
+            }
+            100% {
+              transform: scale(1);
+              box-shadow: 0 0 0 0 rgba(255, 82, 82, 0);
+            }
+          }
         `}
       </style>
       <video
@@ -83,7 +176,7 @@ const DockWorkerView: React.FC = () => {
           objectFit: 'cover',
         }}
       />
-      {isLoading && (
+      {isAnalyzing && (
         <Box sx={{
           position: 'absolute',
           top: 0,
@@ -120,17 +213,73 @@ const DockWorkerView: React.FC = () => {
           variant="contained" 
           color="primary" 
           onClick={handleAnalyzeScene}
-          disabled={isLoading}
+          disabled={isProcessing}
         >
-          {isLoading ? <CircularProgress size={24} /> : 'Analyze Scene'}
+          {isProcessing ? <CircularProgress size={24} /> : 'Analyze Scene'}
         </Button>
-        {analysis && (
-          <Alert severity="info" sx={{ backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}>
-            <Typography variant="body1">{analysis}</Typography>
-          </Alert>
-        )}
         {error && (
-          <Alert severity="error">{error}</Alert>
+          <Alert severity="error" sx={{ animation: 'fadeIn 0.5s' }}>{error}</Alert>
+        )}
+      </Box>
+      <Box sx={{
+        position: 'absolute',
+        bottom: 16,
+        left: 16,
+        zIndex: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 1,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        padding: '12px',
+        borderRadius: '8px',
+      }}>
+        {isRecording ? (
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={stopListening}
+            size="large"
+            sx={{
+              animation: 'pulse 1.5s infinite'
+            }}
+            startIcon={<MicOff />}
+          >
+            Stop Recording
+          </Button>
+        ) : (
+          <Button 
+            variant="contained" 
+            color={initialAnalysisDone ? "primary" : "warning"}
+            onClick={startListening}
+            disabled={isProcessing || !isSupported}
+            size="large"
+            startIcon={<Mic />}
+          >
+            {!isSupported ? 'Recording Not Supported' :
+             !permissionGranted ? 'Enable Microphone' :
+             initialAnalysisDone ? 'Start Recording' : 'Start Recording (Analyze scene first for questions)'}
+          </Button>
+        )}
+        
+        {isRecording && <Typography variant="caption" sx={{color: 'white'}}>🎤 Listening for your question...</Typography>}
+        
+        {/* Status info */}
+        <Typography variant="caption" sx={{color: 'white', fontSize: '10px'}}>
+          Mic: {isSupported ? (permissionGranted ? '✓' : '❌') : 'Not supported'} | 
+          Analysis: {initialAnalysisDone ? '✓' : '❌'}
+        </Typography>
+        
+        {!isSupported && (
+          <Typography variant="caption" sx={{color: 'orange', fontSize: '11px'}}>
+            Speech recognition requires Chrome, Safari, or Edge
+          </Typography>
+        )}
+        
+        {isSupported && !permissionGranted && (
+          <Typography variant="caption" sx={{color: 'orange', fontSize: '11px'}}>
+            Click "Enable Microphone" to start recording
+          </Typography>
         )}
       </Box>
     </Box>

@@ -1,6 +1,25 @@
-# Getting Started with Create React App
+# Jarvis4 - AI-Powered Technician Assistant
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+
+## Setup
+
+### Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```
+REACT_APP_GEMINI_API_KEY=your_gemini_api_key_here
+REACT_APP_ELEVEN_LABS_API_KEY=your_eleven_labs_api_key_here
+REACT_APP_OPENAI_API_KEY=your_openai_api_key_here
+```
+
+**Note:** The app will work with speech recognition even without these API keys, but certain features like scene analysis and text-to-speech will be disabled.
+
+## Browser Compatibility
+
+- **Speech Recognition**: Requires Chrome, Safari, or Edge browser
+- **Microphone Access**: You'll be prompted to allow microphone access when you first click "Start Recording"
 
 ## Available Scripts
 
