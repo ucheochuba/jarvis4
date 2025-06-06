@@ -11,7 +11,7 @@ if (API_KEY) {
 
 const systemInstruction = 'You are a helpful AI assistant speaking to a technician who is on-site. Your goal is to help them work safely and efficiently. Respond in one sentence or less. Address the technician directly using "you".';
 
-export const analyzeScene = async (imageData: string, prompt: string): Promise<string> => {
+export const analyzeScene = async (imageDatas: string[], prompt: string): Promise<string> => {
   if (!API_KEY || !genAI) {
     throw new Error('Gemini API key is not configured in environment variables. Please add REACT_APP_GEMINI_API_KEY to your .env file.');
   }
@@ -21,14 +21,16 @@ export const analyzeScene = async (imageData: string, prompt: string): Promise<s
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction });
 
+    const imageParts = imageDatas.map(imageData => ({
+      inlineData: {
+        mimeType: 'image/jpeg',
+        data: imageData,
+      },
+    }));
+
     const result = await model.generateContent([
       prompt,
-      {
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: imageData
-        }
-      }
+      ...imageParts
     ]);
 
     const response = await result.response;

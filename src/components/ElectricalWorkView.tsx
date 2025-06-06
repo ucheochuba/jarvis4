@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { Box, Button, Typography, CircularProgress, Alert } from '@mui/material';
+import { Box, Button, Typography, CircularProgress, Alert, Paper } from '@mui/material';
 import { Mic, MicOff } from '@mui/icons-material';
 import { analyzeScene, continueConversation } from '../services/geminiService';
 import { speakWithElevenLabs } from '../services/elevenLabsService';
@@ -7,7 +7,7 @@ import { useSpeechRecognition } from '../hooks';
 
 const DANGEROUS_SCENE_PROMPT = "What's dangerous in the scene?";
 
-const DockWorkerView: React.FC = () => {
+const ElectricalWorkView: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -96,7 +96,7 @@ const DockWorkerView: React.FC = () => {
 
       const imageData = tempCanvas.toDataURL('image/jpeg').replace('data:image/jpeg;base64,', '');
       
-      const result = await analyzeScene(imageData, DANGEROUS_SCENE_PROMPT);
+      const result = await analyzeScene([imageData], DANGEROUS_SCENE_PROMPT);
       setIsAnalyzing(false);
       setAnalysis(result);
       setInitialAnalysisDone(true);
@@ -126,8 +126,9 @@ const DockWorkerView: React.FC = () => {
     <Box sx={{
       position: 'relative',
       width: '100%',
-      height: '100vh',
-      overflow: 'hidden'
+      minHeight: '100%',
+      overflow: 'auto',
+      borderRadius: 2,
     }}>
       <style>
         {`
@@ -150,15 +151,15 @@ const DockWorkerView: React.FC = () => {
           @keyframes pulse {
             0% {
               transform: scale(1);
-              box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.7);
+              box-shadow: 0 0 0 0 rgba(220, 0, 78, 0.7);
             }
             70% {
               transform: scale(1.05);
-              box-shadow: 0 0 10px 20px rgba(255, 82, 82, 0);
+              box-shadow: 0 0 10px 20px rgba(220, 0, 78, 0);
             }
             100% {
               transform: scale(1);
-              box-shadow: 0 0 0 0 rgba(255, 82, 82, 0);
+              box-shadow: 0 0 0 0 rgba(220, 0, 78, 0);
             }
           }
         `}
@@ -183,7 +184,7 @@ const DockWorkerView: React.FC = () => {
           left: 0,
           width: '100%',
           height: '100%',
-          backgroundColor: 'rgba(0, 120, 255, 0.3)',
+          backgroundColor: 'rgba(74, 124, 114, 0.3)',
           zIndex: 15,
           overflow: 'hidden'
         }}>
@@ -193,7 +194,7 @@ const DockWorkerView: React.FC = () => {
             left: 0,
             width: '50%',
             height: '100%',
-            background: 'linear-gradient(to right, rgba(0, 120, 255, 0.1) 0%, rgba(0, 120, 255, 0.5) 50%, rgba(0, 120, 255, 0.1) 100%)',
+            background: 'linear-gradient(to right, rgba(74, 124, 114, 0.1) 0%, rgba(74, 124, 114, 0.5) 50%, rgba(74, 124, 114, 0.1) 100%)',
             animation: 'sweep 2s infinite linear',
             zIndex: 16
           }}/>
@@ -214,8 +215,9 @@ const DockWorkerView: React.FC = () => {
           color="primary" 
           onClick={handleAnalyzeScene}
           disabled={isProcessing}
+          sx={{ '&:hover': { backgroundColor: 'primary.dark' } }}
         >
-          {isProcessing ? <CircularProgress size={24} /> : 'Analyze Scene'}
+          {isProcessing ? <CircularProgress size={24} color="inherit" /> : 'Analyze Scene'}
         </Button>
         {error && (
           <Alert severity="error" sx={{ animation: 'fadeIn 0.5s' }}>{error}</Alert>
@@ -229,19 +231,27 @@ const DockWorkerView: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-start',
-        gap: 1,
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        padding: '12px',
-        borderRadius: '8px',
+        gap: 2,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        padding: 2,
+        borderRadius: 2,
+        maxWidth: 'calc(100% - 32px)',
       }}>
+        {analysis && (
+          <Paper elevation={4} sx={{ p: 2, backgroundColor: 'background.paper', width: '100%', animation: 'fadeIn 0.5s' }}>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{analysis}</Typography>
+          </Paper>
+        )}
         {isRecording ? (
           <Button 
             variant="contained" 
-            color="error" 
+            color="secondary" 
             onClick={stopListening}
             size="large"
             sx={{
-              animation: 'pulse 1.5s infinite'
+              animation: 'pulse 1.5s infinite',
+              backgroundColor: '#dc004e',
+              '&:hover': { backgroundColor: '#9a0036' }
             }}
             startIcon={<MicOff />}
           >
@@ -250,40 +260,23 @@ const DockWorkerView: React.FC = () => {
         ) : (
           <Button 
             variant="contained" 
-            color={initialAnalysisDone ? "primary" : "warning"}
             onClick={startListening}
-            disabled={isProcessing || !isSupported}
+            disabled={!initialAnalysisDone || isProcessing || !isSupported}
             size="large"
             startIcon={<Mic />}
           >
-            {!isSupported ? 'Recording Not Supported' :
-             !permissionGranted ? 'Enable Microphone' :
-             initialAnalysisDone ? 'Start Recording' : 'Start Recording (Analyze scene first for questions)'}
+            Ask a question
           </Button>
         )}
-        
-        {isRecording && <Typography variant="caption" sx={{color: 'white'}}>🎤 Listening for your question...</Typography>}
-        
-        {/* Status info */}
-        <Typography variant="caption" sx={{color: 'white', fontSize: '10px'}}>
-          Mic: {isSupported ? (permissionGranted ? '✓' : '❌') : 'Not supported'} | 
-          Analysis: {initialAnalysisDone ? '✓' : '❌'}
-        </Typography>
-        
-        {!isSupported && (
-          <Typography variant="caption" sx={{color: 'orange', fontSize: '11px'}}>
-            Speech recognition requires Chrome, Safari, or Edge
-          </Typography>
-        )}
-        
-        {isSupported && !permissionGranted && (
-          <Typography variant="caption" sx={{color: 'orange', fontSize: '11px'}}>
-            Click "Enable Microphone" to start recording
-          </Typography>
+        {!isSupported && <Alert severity="warning" variant="outlined">Speech recognition is not supported in this browser.</Alert>}
+        {initialAnalysisDone && !permissionGranted && (
+          <Alert severity="warning" variant="outlined">
+            Microphone permission is not granted. Click the "Ask a question" button to enable it.
+          </Alert>
         )}
       </Box>
     </Box>
   );
 };
 
-export default DockWorkerView; 
+export default ElectricalWorkView; 

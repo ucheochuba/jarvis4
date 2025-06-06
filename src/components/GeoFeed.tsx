@@ -4,9 +4,10 @@ import { Box, Paper, Typography } from '@mui/material';
 import { DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getTechnicians, Technician } from '../services/technicianService';
+import { useTheme } from '@mui/material/styles';
 
 // Create a custom pulsing marker
-const createPulsingIcon = (color: string = '#1976d2') => {
+const createPulsingIcon = (color: string) => {
   return new DivIcon({
     className: 'custom-pulse-marker',
     html: `
@@ -58,11 +59,12 @@ style.textContent = `
 
   .speech-bubble {
     position: relative;
-    background: #ffffff;
+    background: white;
     border-radius: 8px;
-    padding: 8px;
+    padding: 12px;
     margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border: 1px solid #ddd;
   }
 
   .speech-bubble:after {
@@ -73,7 +75,7 @@ style.textContent = `
     transform: translateX(-50%);
     border-width: 10px 10px 0;
     border-style: solid;
-    border-color: #ffffff transparent transparent;
+    border-color: white transparent transparent;
   }
 
   .leaflet-popup {
@@ -84,6 +86,7 @@ document.head.appendChild(style);
 
 const GeoFeed: React.FC = () => {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const theme = useTheme();
 
   useEffect(() => {
     const fetchTechnicians = async () => {
@@ -115,45 +118,51 @@ const GeoFeed: React.FC = () => {
   };
 
   return (
-    <Box sx={{ width: '100%', height: '100vh', position: 'relative' }}>
-      <MapContainer
-        center={[center.lat, center.lng]}
-        zoom={13}
-        style={{ width: '100%', height: '100%' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        {technicians.map((technician) => (
-          <React.Fragment key={technician.id}>
-            <Marker
-              position={[technician.location.latitude, technician.location.longitude]}
-              icon={createPulsingIcon()}
-            >
-              <Popup
+    <Box sx={{ width: '100%', height: '100%', position: 'relative', p: 2, boxSizing: 'border-box' }}>
+      <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main', textAlign: 'center' }}>
+        Technician Geo-location Feed
+      </Typography>
+      <Paper elevation={4} sx={{ width: '100%', height: 'calc(100% - 48px)', overflow: 'hidden', borderRadius: 2 }}>
+        <MapContainer
+          center={[center.lat, center.lng]}
+          zoom={13}
+          style={{ width: '100%', height: '100%' }}
+          scrollWheelZoom={false}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          />
+          {technicians.map((technician) => (
+            <React.Fragment key={technician.id}>
+              <Marker
                 position={[technician.location.latitude, technician.location.longitude]}
-                closeButton={false}
-                autoPan={false}
-                className="speech-bubble"
-                offset={[0, -125]}
+                icon={createPulsingIcon(theme.palette.primary.main)}
               >
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                  {technician.name}
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
-                  Status: {technician.status}
-                </Typography>
-                {technician.summary && (
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    {technician.summary}
+                <Popup
+                  position={[technician.location.latitude, technician.location.longitude]}
+                  closeButton={false}
+                  autoPan={false}
+                  className="speech-bubble"
+                  offset={[0, -25]}
+                >
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 0.5, color: 'primary.dark' }}>
+                    {technician.name}
                   </Typography>
-                )}
-              </Popup>
-            </Marker>
-          </React.Fragment>
-        ))}
-      </MapContainer>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                    Status: {technician.status}
+                  </Typography>
+                  {technician.summary && (
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      {technician.summary}
+                    </Typography>
+                  )}
+                </Popup>
+              </Marker>
+            </React.Fragment>
+          ))}
+        </MapContainer>
+      </Paper>
     </Box>
   );
 };

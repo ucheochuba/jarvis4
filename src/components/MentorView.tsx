@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Box, Typography, Paper, CircularProgress, Tabs, Tab } from '@mui/material';
 import { analyzeVideoFrames } from '../services/api';
 import { analyzeTechnicianVideo } from '../services/technicianService';
 import logger from '../services/logger';
 import GeoFeed from './GeoFeed';
-import DockWorkerView from './DockWorkerView';
+import ElectricalWorkView from './ElectricalWorkView';
+import FluxCapacitorView from './FluxCapacitorView';
 
 interface VideoFrameProps {
   videoSrc: string;
@@ -59,7 +61,7 @@ const VideoFrame: React.FC<VideoFrameProps> = ({ videoSrc, technicianId, videoRe
     };
   }, [technicianId, videoRef]);
 
-  const captureAndAnalyzeFrames = async (video: HTMLVideoElement) => {
+  const captureAndAnalyzeFrames = useCallback(async (video: HTMLVideoElement) => {
     if (!video) {
       logger.error(`[${technicianId}] No video element available`);
       return;
@@ -126,7 +128,7 @@ const VideoFrame: React.FC<VideoFrameProps> = ({ videoSrc, technicianId, videoRe
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [technicianId]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -168,7 +170,7 @@ const VideoFrame: React.FC<VideoFrameProps> = ({ videoSrc, technicianId, videoRe
       }
       video.removeEventListener('canplay', handleVideoReady);
     };
-  }, [technicianId, videoRef]);
+  }, [technicianId, videoRef, captureAndAnalyzeFrames]);
 
   const handleClick = async () => {
     if (!containerRef.current) return;
@@ -186,22 +188,25 @@ const VideoFrame: React.FC<VideoFrameProps> = ({ videoSrc, technicianId, videoRe
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: '600px' }}>
+    <Box sx={{ width: '100%', maxWidth: '600px', margin: 'auto' }}>
       <Paper
         elevation={3}
         sx={{
           p: 2,
           mb: 2,
-          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+          backgroundColor: 'background.paper',
           display: 'flex',
           alignItems: 'center',
-          gap: 2
+          gap: 2,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider'
         }}
       >
-        <Typography variant="h6" sx={{ flex: 1, whiteSpace: 'pre-wrap' }}>
+        <Typography variant="body1" sx={{ flex: 1, whiteSpace: 'pre-wrap' }}>
           {summary}
         </Typography>
-        {isAnalyzing && <CircularProgress size={24} />}
+        {isAnalyzing && <CircularProgress size={24} color="primary" />}
       </Paper>
       <Paper
         ref={containerRef}
@@ -234,15 +239,16 @@ const VideoFrame: React.FC<VideoFrameProps> = ({ videoSrc, technicianId, videoRe
         />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
         <Typography
-          variant="h6"
+          variant="caption"
           sx={{
             position: 'absolute',
-            bottom: 16,
-            right: 16,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            bottom: 8,
+            right: 8,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
             color: 'white',
-            padding: '4px 12px',
-            borderRadius: 1
+            padding: '2px 8px',
+            borderRadius: 1,
+            fontWeight: 'bold',
           }}
         >
           {technicianId}
@@ -253,45 +259,67 @@ const VideoFrame: React.FC<VideoFrameProps> = ({ videoSrc, technicianId, videoRe
 };
 
 const MentorView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState(0);
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.pathname.includes('/technician') ? 1 : 0);
+  const [activeSubTab, setActiveSubTab] = useState(0);
   const videoRef1 = useRef<HTMLVideoElement | null>(null);
   const videoRef2 = useRef<HTMLVideoElement | null>(null);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
+    setActiveSubTab(0); // Reset sub-tab when main tab changes
+  };
+
+  const handleSubTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveSubTab(newValue);
   };
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', p: 3 }}>
+      <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main', textAlign: 'center' }}>
+        {activeTab === 0 ? 'Mentor Dashboard' : 'Technician View'}
+      </Typography>
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={activeTab} onChange={handleTabChange} centered>
-          <Tab label="Live Feed" />
-          <Tab label="Geo Feed" />
-          <Tab label="Dock Worker" />
+        <Tabs value={activeTab} onChange={handleTabChange} centered indicatorColor="primary" textColor="primary">
+          <Tab label="Mentor" />
+          <Tab label="Technician" />
         </Tabs>
       </Box>
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 0 ? (
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 4,
-              p: 2,
-              height: '100%',
-              boxSizing: 'border-box',
-              alignItems: 'flex-start',
-              justifyContent: 'center'
-            }}
-          >
-            <VideoFrame videoSrc="/mechanic.mov" technicianId="Technician 42" videoRef={videoRef1} />
-            <VideoFrame videoSrc="/electrician.mov" technicianId="Technician 43" videoRef={videoRef2} />
-          </Box>
-        ) : activeTab === 1 ? (
-          <GeoFeed />
-        ) : (
-          <DockWorkerView />
-        )}
-      </Box>
+      {activeTab === 0 && (
+        <Box sx={{ flex: 1, overflow: 'auto', pt: 2 }}>
+          <Tabs value={activeSubTab} onChange={handleSubTabChange} centered indicatorColor="secondary" textColor="secondary">
+            <Tab label="Live Feed" />
+            <Tab label="Geo Feed" />
+          </Tabs>
+          {activeSubTab === 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 4,
+                p: 2,
+                boxSizing: 'border-box',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <VideoFrame videoSrc="/mechanic.mov" technicianId="Technician 42" videoRef={videoRef1} />
+              <VideoFrame videoSrc="/mechanic2.mov" technicianId="Technician 43" videoRef={videoRef2} />
+            </Box>
+          )}
+          {activeSubTab === 1 && <GeoFeed />}
+        </Box>
+      )}
+      {activeTab === 1 && (
+        <Box sx={{ flex: 1, overflow: 'auto', pt: 2 }}>
+          <Tabs value={activeSubTab} onChange={handleSubTabChange} centered indicatorColor="secondary" textColor="secondary">
+            <Tab label="Electrical Work" />
+            <Tab label="Flux Capacitor" />
+          </Tabs>
+          {activeSubTab === 0 && <ElectricalWorkView />}
+          {activeSubTab === 1 && <FluxCapacitorView />}
+        </Box>
+      )}
     </Box>
   );
 };

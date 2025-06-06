@@ -3,17 +3,26 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import RoleSelection from './components/RoleSelection';
 import MentorView from './components/MentorView';
-import DockWorkerView from './components/DockWorkerView';
 
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#1976d2',
+      main: '#4A7C72', // dark-green
     },
     secondary: {
-      main: '#dc004e',
+      main: '#A9D3F5', // light-blue
     },
+    background: {
+      default: '#FAFAFA',
+      paper: '#FFFFFF',
+    },
+    text: {
+      primary: '#333333',
+    },
+  },
+  typography: {
+    fontFamily: "'Public Sans', sans-serif",
   },
 });
 
@@ -25,7 +34,7 @@ function App() {
         <Routes>
           <Route path="/" element={<RoleSelection />} />
           <Route path="/mentor" element={<MentorView />} />
-          <Route path="/dock-worker" element={<DockWorkerView />} />
+          <Route path="/technician" element={<MentorView />} />
         </Routes>
       </Router>
     </ThemeProvider>
