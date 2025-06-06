@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import RoleSelection from './components/RoleSelection';
 import MentorView from './components/MentorView';
-import VideoDetection from './components/VideoDetection';
+import DockWorkerView from './components/DockWorkerView';
 
 const theme = createTheme({
   palette: {
@@ -25,8 +25,7 @@ function App() {
         <Routes>
           <Route path="/" element={<RoleSelection />} />
           <Route path="/mentor" element={<MentorView />} />
-          <Route path="/technician" element={<div>Technician View (Coming Soon)</div>} />
-          <Route path="/video-detection" element={<VideoDetection />} />
+          <Route path="/dock-worker" element={<DockWorkerView />} />
         </Routes>
       </Router>
     </ThemeProvider>

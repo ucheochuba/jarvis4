@@ -1,196 +1,138 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Box, Typography, CircularProgress, Alert } from '@mui/material';
-import { detectPeople, DetectionResult } from '../services/geminiService';
-
-const DETECTION_INTERVAL = 2000; // 2 seconds between detections
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
-const MAX_IMAGE_SIZE = 640; // Maximum dimension for the image
+import React, { useRef, useState } from 'react';
+import { Box, Button, Typography, CircularProgress, Alert, TextField } from '@mui/material';
+import { analyzeScene } from '../services/geminiService';
+import { speakWithElevenLabs } from '../services/elevenLabsService';
 
 const DockWorkerView: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [detectionCount, setDetectionCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [analysis, setAnalysis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const lastDetectionTimeRef = useRef<number>(0);
-  const retryCountRef = useRef<number>(0);
-  const detectionTimeoutRef = useRef<number>();
 
-  const drawDetections = useCallback((detections: DetectionResult[]) => {
-    if (!canvasRef.current || !videoRef.current) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Clear previous drawings
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Set canvas size to match video
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-
-    // Draw each detection
-    detections.forEach(detection => {
-      const { boundingBox, confidence, label } = detection;
-      
-      // Draw bounding box
-      ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        boundingBox.x,
-        boundingBox.y,
-        boundingBox.width,
-        boundingBox.height
-      );
-
-      // Draw label background
-      const labelText = `${label} ${Math.round(confidence * 100)}%`;
-      ctx.font = '16px Arial';
-      const textWidth = ctx.measureText(labelText).width;
-      ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
-      ctx.fillRect(
-        boundingBox.x,
-        boundingBox.y - 20,
-        textWidth + 10,
-        20
-      );
-
-      // Draw label text
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(
-        labelText,
-        boundingBox.x + 5,
-        boundingBox.y - 5
-      );
-    });
-  }, []);
-
-  const detectPeopleInFrame = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current || !isDetecting) return;
-
-    const now = Date.now();
-    if (now - lastDetectionTimeRef.current < DETECTION_INTERVAL) {
+  const handleAnalyzeScene = async () => {
+    if (!videoRef.current) {
       return;
     }
 
-    try {
-      lastDetectionTimeRef.current = now;
-      setError(null);
+    const elevenLabsApiKey = process.env.REACT_APP_ELEVEN_LABS_API_KEY;
+    if (!elevenLabsApiKey) {
+      setError('ElevenLabs API key is not configured in .env file.');
+      return;
+    }
 
-      // Create a temporary canvas to capture the video frame
+    setIsLoading(true);
+    setAnalysis(null);
+    setError(null);
+
+    try {
+      const video = videoRef.current;
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) return;
-
-      // Set temp canvas size to match video
-      tempCanvas.width = videoRef.current.videoWidth;
-      tempCanvas.height = videoRef.current.videoHeight;
-
-      // Draw current video frame to temp canvas
-      tempCtx.drawImage(
-        videoRef.current,
-        0,
-        0,
-        tempCanvas.width,
-        tempCanvas.height
-      );
-
-      // Get image data as base64
-      const imageData = tempCanvas.toDataURL('image/jpeg', 0.7)
-        .replace('data:image/jpeg;base64,', '');
-
-      // Detect people
-      const detections = await detectPeople(imageData);
-      
-      // Update detection count
-      setDetectionCount(detections.length);
-      
-      // Draw detections on the main canvas
-      drawDetections(detections);
-      
-      // Reset retry count on success
-      retryCountRef.current = 0;
-    } catch (error) {
-      console.error('Error detecting people:', error);
-      
-      // Implement retry logic
-      if (retryCountRef.current < MAX_RETRIES) {
-        retryCountRef.current++;
-        detectionTimeoutRef.current = window.setTimeout(
-          detectPeopleInFrame,
-          RETRY_DELAY * retryCountRef.current
-        );
-      } else {
-        setError('Error detecting people. Please try again.');
-        retryCountRef.current = 0;
+      if (!tempCtx) {
+        throw new Error('Could not get canvas context');
       }
+
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+      const imageData = tempCanvas.toDataURL('image/jpeg').replace('data:image/jpeg;base64,', '');
+      
+      const result = await analyzeScene(imageData);
+      setAnalysis(result);
+      await speakWithElevenLabs(result, elevenLabsApiKey);
+
+    } catch (err) {
+      console.error('Analysis or speech error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(`Error: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
     }
-  }, [drawDetections, isDetecting]);
-
-  // Start detection loop
-  const startDetectionLoop = useCallback(() => {
-    if (!isDetecting) return;
-
-    detectPeopleInFrame();
-    detectionTimeoutRef.current = window.setTimeout(startDetectionLoop, DETECTION_INTERVAL);
-  }, [detectPeopleInFrame, isDetecting]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const handleVideoReady = () => {
-      setIsDetecting(true);
-      startDetectionLoop();
-    };
-
-    video.addEventListener('loadeddata', handleVideoReady);
-
-    return () => {
-      video.removeEventListener('loadeddata', handleVideoReady);
-      if (detectionTimeoutRef.current) {
-        window.clearTimeout(detectionTimeoutRef.current);
-      }
-    };
-  }, [startDetectionLoop]);
+  };
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
+    <Box sx={{
+      position: 'relative',
+      width: '100%',
+      height: '100vh',
+      overflow: 'hidden'
+    }}>
+      <style>
+        {`
+          @keyframes sweep {
+            0% {
+              transform: translateX(-100%);
+            }
+            100% {
+              transform: translateX(100%);
+            }
+          }
+        `}
+      </style>
       <video
         ref={videoRef}
-        src="/forklift.mov"
+        src="/electrician.mov"
         autoPlay
         loop
         muted
         playsInline
-        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-      />
-      <canvas
-        ref={canvasRef}
         style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+        }}
+      />
+      {isLoading && (
+        <Box sx={{
           position: 'absolute',
           top: 0,
           left: 0,
           width: '100%',
           height: '100%',
-          pointerEvents: 'none'
-        }}
-      />
-      {isDetecting && (
-        <Box sx={{ position: 'absolute', top: 16, right: 16, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <CircularProgress size={24} />
-          <Typography variant="body2" color="white" sx={{ textShadow: '0 0 4px rgba(0,0,0,0.5)' }}>
-            Detecting people... ({detectionCount} found)
-          </Typography>
+          backgroundColor: 'rgba(0, 120, 255, 0.3)',
+          zIndex: 15,
+          overflow: 'hidden'
+        }}>
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '50%',
+            height: '100%',
+            background: 'linear-gradient(to right, rgba(0, 120, 255, 0.1) 0%, rgba(0, 120, 255, 0.5) 50%, rgba(0, 120, 255, 0.1) 100%)',
+            animation: 'sweep 2s infinite linear',
+            zIndex: 16
+          }}/>
         </Box>
       )}
-      {error && (
-        <Alert severity="error" sx={{ position: 'absolute', top: 16, left: 16, right: 16 }}>
-          {error}
-        </Alert>
-      )}
+      <Box sx={{ 
+        position: 'absolute', 
+        top: 16, 
+        right: 16, 
+        zIndex: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        gap: 2
+      }}>
+        <Button 
+          variant="contained" 
+          color="primary" 
+          onClick={handleAnalyzeScene}
+          disabled={isLoading}
+        >
+          {isLoading ? <CircularProgress size={24} /> : 'Analyze Scene'}
+        </Button>
+        {analysis && (
+          <Alert severity="info" sx={{ backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}>
+            <Typography variant="body1">{analysis}</Typography>
+          </Alert>
+        )}
+        {error && (
+          <Alert severity="error">{error}</Alert>
+        )}
+      </Box>
     </Box>
   );
 };
