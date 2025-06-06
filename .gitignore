@@ -28,3 +28,12 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
+
+# Video files
+*.mov
+*.mp4
+*.avi
+*.mkv
+*.webm
+public/*.mov
+public/*.mp4
